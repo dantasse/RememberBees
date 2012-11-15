@@ -3,13 +3,43 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent" >
 
+    <Button
+        android:id="@+id/test_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true"
+        android:layout_centerHorizontal="true"
+        android:layout_marginTop="48dp"
+        android:text="@string/test_accelerometer" />
+
     <TextView
         android:id="@+id/hello_world_text_view"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_centerHorizontal="true"
-        android:layout_centerVertical="true"
-        android:text="@string/hello_world"
+        android:layout_alignParentBottom="true"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentRight="true"
+        android:layout_marginBottom="52dp"
+        android:paddingLeft="@dimen/SidePadding"
+        android:textSize="@dimen/TextSize"
         tools:context=".RememberBeesActivity" />
+
+    <Button
+        android:id="@+id/calibrate_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/test_button"
+        android:layout_centerHorizontal="true"
+        android:layout_marginTop="26dp"
+        android:text="@string/calibrate" />
+
+    <Button
+        android:id="@+id/go_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/calibrate_button"
+        android:layout_centerHorizontal="true"
+        android:layout_marginTop="20dp"
+        android:text="@string/go" />
 
 </RelativeLayout>
