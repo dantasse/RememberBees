@@ -14,6 +14,7 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Vibrator;
 import android.util.Pair;
 import android.view.Menu;
 import android.view.View;
@@ -26,6 +27,7 @@ public class RememberBeesActivity extends Activity implements
 
     SensorManager sensorManager;
     Sensor accelerometer;
+    Vibrator vibrator;
     private static final int SAMPLING_SPEED = SensorManager.SENSOR_DELAY_FASTEST;
     Button calibrateButton;
     Button testButton;
@@ -34,6 +36,7 @@ public class RememberBeesActivity extends Activity implements
     private State currentState = State.NONE;
     NumberFormat nf = NumberFormat.getNumberInstance();
     Handler handler;
+
 
     // for testing:
     private int numSamples;
@@ -67,6 +70,7 @@ public class RememberBeesActivity extends Activity implements
         accelerometer = sensorManager
                 .getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION);
         sensorManager.registerListener(this, accelerometer, SAMPLING_SPEED);
+        vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
 
         calibrateButton = (Button) findViewById(R.id.calibrate_button);
         testButton = (Button) findViewById(R.id.test_button);
@@ -158,7 +162,8 @@ public class RememberBeesActivity extends Activity implements
             float output = z - expAvg;
             String listenOutputText = "Output: " + nf.format(output);
             if (output < whackThreshold) {
-                listenOutputText = "WHACK" + listenOutputText;                
+                listenOutputText = "WHACK" + listenOutputText;
+                vibrator.vibrate(300);
             }
             textView.setText(listenOutputText);
             //TODO

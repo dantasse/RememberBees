@@ -2,7 +2,6 @@ package com.dantasse.rememberbees;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.logging.Logger;
 
 public class WhackThresholdCalculator {
 
@@ -63,7 +62,6 @@ public class WhackThresholdCalculator {
 
         float mean = mean(lowests);//sum / lowests.size();
         float sd = sd(lowests);
-        Logger.getAnonymousLogger().warning("mean: " + mean + ", sd: " + sd(lowests));
-        return mean + 2 * sd; // plus because we're all in the negatives here...
+        return mean + 2*sd; // 2 sd less than mean; plus because we're all in the negatives here
     }
 }
