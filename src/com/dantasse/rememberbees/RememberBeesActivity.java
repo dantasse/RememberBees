@@ -25,10 +25,12 @@ import android.widget.TextView;
 public class RememberBeesActivity extends Activity implements
         SensorEventListener, OnClickListener {
 
+    private static final int SAMPLING_SPEED = SensorManager.SENSOR_DELAY_FASTEST;
+    private static final int WHACK_TIMEOUT = 500; // ms between whacks
+    
     SensorManager sensorManager;
     Sensor accelerometer;
     Vibrator vibrator;
-    private static final int SAMPLING_SPEED = SensorManager.SENSOR_DELAY_FASTEST;
     Button calibrateButton;
     Button testButton;
     Button goButton;
@@ -48,16 +50,23 @@ public class RememberBeesActivity extends Activity implements
     private List<Float> calibrationReadings = new ArrayList<Float>();
     static final int NUM_CALIBRATION_WHACKS = 6;
     WhackThresholdCalculator whackThresholdCalculator = new WhackThresholdCalculator();
+    // in heard_1 state:
+    private float expAvg2 = 0;
     // for listening:
     private float expAvg = 0;
-    private float whackThreshold = 0; // will be negative; TODO should we absolute-value this?
-
+    private float whackThreshold = -5f; // will be negative; TODO should we absolute-value this?
+    // for while buzzing:
+    private float buzzExpAvg = 0;
+    private float expAvg3 = 0; //TODO refactor, ugh, right
+    
     private enum State {
         TESTING, //  making sure your phone's accelerometer is fast enough 
         PRE_CALIBRATING, // countdown before calibration
         CALIBRATING, // get a good sense of how hard you hit your phone
         LISTENING, // listening for whacks
-        BUZZING, // or between buzzes
+        HEARD_1, // heard one whack, waiting for the second for it to count
+        REMINDING, // or between buzzes
+        HEARD_1_ON, // heard one whack, waiting for the second, to stop the reminding
         NONE; // like when you open the app
     }
 
@@ -85,16 +94,28 @@ public class RememberBeesActivity extends Activity implements
         nf.setMinimumFractionDigits(2);
 
         handler = new Handler();
+        for (int i = 0; i < buzzes.length - 1; i++) {
+            buzzes[i] = new Runnable() {
+                @Override
+                public void run() {
+                    vibrator.vibrate(2000);
+                    // TODO also post some kind of update on the screen, like
+                    // how many buzzes are left
+                }
+            };
+        }
     }
 
     protected void onResume() {
         super.onResume();
         sensorManager.registerListener(this, accelerometer, SAMPLING_SPEED);
+        changeUiState(State.NONE);
     }
 
     protected void onPause() {
         super.onPause();
         sensorManager.unregisterListener(this);
+        changeUiState(State.NONE);
     }
 
     @Override
@@ -160,16 +181,64 @@ public class RememberBeesActivity extends Activity implements
             float z = event.values[2]; // 0 is x, 1 is y
             expAvg = expAvg * .5f + z * .5f;
             float output = z - expAvg;
-            String listenOutputText = "Output: " + nf.format(output);
             if (output < whackThreshold) {
-                listenOutputText = "WHACK" + listenOutputText;
-                vibrator.vibrate(300);
+                // got to post this because otherwise it'll still be reading a
+                // whack while it's in the next state, so it'll immediately switch back.
+                handler.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        changeUiState(State.HEARD_1);
+                    }
+                }, 100);
             }
-            textView.setText(listenOutputText);
-            //TODO
             break;
-        case BUZZING:
-            // TODO
+        case HEARD_1:
+            // TODO what's the deal with this duplication of variables.
+            // someone who knows how to write code should clean this up.
+            float z2 = event.values[2]; // 0 is x, 1 is y
+            expAvg2 = expAvg2 * .5f + z2 * .5f;
+            float output2 = z2 - expAvg2;
+            if (output2 < whackThreshold) {
+                // got to post this because otherwise it'll still be reading a
+                // whack while it's in REMINDING, so it'll immediately switch back.
+                handler.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        changeUiState(State.REMINDING);
+                    }
+                }, 100);
+            }
+            break;
+        case REMINDING:
+            float buzzZ = event.values[2]; // 0 is x, 1 is y
+            buzzExpAvg = buzzExpAvg * .5f + buzzZ * .5f;
+            float buzzOutput = buzzZ - buzzExpAvg;
+            if (buzzOutput < whackThreshold) {
+
+                // got to post this because otherwise it'll still be reading a
+                // whack while it's in LISTENING, so it'll immediately switch back.
+                handler.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        changeUiState(State.HEARD_1_ON);
+                    }
+                }, 100);
+            }
+            break;
+        case HEARD_1_ON:
+            float z3 = event.values[2]; // 0 is x, 1 is y
+            expAvg3 = expAvg3 * .5f + z3 * .5f;
+            float output3 = z3 - expAvg3;
+            if (output3 < whackThreshold) {
+                // got to post this because otherwise it'll still be reading a
+                // whack while it's in LISTENING, so it'll immediately switch back.
+                handler.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        changeUiState(State.LISTENING);
+                    }
+                }, 100);
+            }
             break;
         case NONE:
             // nothing
@@ -218,6 +287,20 @@ public class RememberBeesActivity extends Activity implements
         }
     };
     
+    private Runnable[] buzzes = new Runnable[6];
+    private Runnable stopper = new Runnable() {
+        @Override
+        public void run() {
+            changeUiState(State.LISTENING);
+        }
+    };
+    private Runnable whackTimeout = new Runnable() {
+        @Override
+        public void run() {
+            changeUiState(State.LISTENING);
+        }
+    };
+    
     private List<Pair<Float, Integer>> findLowests(List<Float> readings) {
 
         List<Pair<Float, Integer>> lowests = new ArrayList<Pair<Float, Integer>>();
@@ -247,10 +330,14 @@ public class RememberBeesActivity extends Activity implements
         }
         return lowests;
     }
-    
    
     
     private void changeUiState(State newState) {
+        for (Runnable buzz : buzzes) {
+            handler.removeCallbacks(buzz);
+        }
+        handler.removeCallbacks(stopper);
+        handler.removeCallbacks(whackTimeout);
         switch (newState) {
         case TESTING:
             disableInputs();
@@ -268,14 +355,34 @@ public class RememberBeesActivity extends Activity implements
             textView.setText("Put your phone in your pocket and hit it 6 times.");
             break;
         case LISTENING:
-//            disableInputs();
+            disableInputs();
+            vibrator.vibrate(new long[]{200, 400, 200}, -1);
             textView.setText("Listening...");
             break;
-        case BUZZING:
+        case HEARD_1:
             disableInputs();
+            textView.setText("Heard one whack, waiting for the second.");
+            handler.postDelayed(whackTimeout, WHACK_TIMEOUT);
+            break;
+        case REMINDING:
+            disableInputs();
+            handler.post(buzzes[0]);
+            handler.postDelayed(buzzes[1], 3 * 1000);
+            handler.postDelayed(buzzes[2], 9 * 1000);
+            handler.postDelayed(buzzes[3], 27 * 1000);
+            handler.postDelayed(buzzes[4], 81 * 1000);
+            handler.postDelayed(buzzes[5], 243 * 1000); // about 4 minutes
+            handler.postDelayed(stopper, 244 * 1000);
+            textView.setText("Reminding you sometimes now");
+            break;
+        case HEARD_1_ON:
+            disableInputs();
+            textView.setText("Heard one whack, waiting for the second.");
+            handler.postDelayed(whackTimeout, WHACK_TIMEOUT);
             break;
         case NONE:
             allowInputs();
+            textView.setText("");
             break;
         }
         currentState = newState;
