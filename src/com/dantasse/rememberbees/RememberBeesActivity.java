@@ -15,8 +15,8 @@ import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Vibrator;
+import android.util.Log;
 import android.util.Pair;
-import android.view.Menu;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.widget.Button;
@@ -73,6 +73,7 @@ public class RememberBeesActivity extends Activity implements
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Log.d("RememberBees", "onCreate");
         setContentView(R.layout.activity_remember_bees);
 
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
@@ -109,25 +110,33 @@ public class RememberBeesActivity extends Activity implements
     protected void onResume() {
         super.onResume();
         sensorManager.registerListener(this, accelerometer, SAMPLING_SPEED);
-        changeUiState(State.NONE);
+//        changeUiState(State.NONE);
     }
 
     protected void onPause() {
         super.onPause();
         sensorManager.unregisterListener(this);
-        changeUiState(State.NONE);
+//        changeUiState(State.NONE);
+    }
+    
+    @Override
+    protected void onRestoreInstanceState(Bundle savedInstanceState) {
+        super.onRestoreInstanceState(savedInstanceState);
+        changeUiState(State.valueOf(savedInstanceState.getString("RememberBeesState")));
+        Log.d("RememberBees", "RESTORING STATE: " + savedInstanceState.getString("RememberBeesState"));
+        // TODO but all the dang timers have to get reset too
     }
 
     @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        getMenuInflater().inflate(R.menu.activity_remember_bees, menu);
-        return true;
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putString("RememberBeesState", currentState.toString());
+        Log.d("RememberBees", "SAVING STATE: " + outState.getString("RememberBeesState"));
     }
 
     @Override
-    public void onAccuracyChanged(Sensor sensor, int accuracy) { /* nothing */
-    }
-
+    public void onAccuracyChanged(Sensor sensor, int accuracy) { /* nothing */ }
+    
     @Override
     public void onSensorChanged(SensorEvent event) {
         switch(currentState) {
@@ -138,6 +147,7 @@ public class RememberBeesActivity extends Activity implements
                 long numMs = now - testStartTime;
                 double sampleRate = numSamples * 1000.0 / numMs;
                 String displayText = "Sample Rate: " + nf.format(sampleRate) + "\n";
+                Log.d("RememberBees", displayText);
                 if (sampleRate > 90) {
                     displayText += "RememberBees will work great.";
                 } else if (sampleRate > 40 && sampleRate <= 90) {
@@ -145,8 +155,8 @@ public class RememberBeesActivity extends Activity implements
                 } else {
                     displayText += "RememberBees probably won't work.";
                 }
-                textView.setText(displayText);
                 changeUiState(State.NONE);
+                textView.setText(displayText);
             }
             break;
         case PRE_CALIBRATING:

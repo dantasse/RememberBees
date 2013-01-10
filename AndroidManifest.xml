@@ -14,7 +14,9 @@
         android:theme="@style/AppTheme" >
         <activity
             android:name=".RememberBeesActivity"
-            android:label="@string/title_activity_remember_bees" >
+            android:label="@string/title_activity_remember_bees"
+            android:screenOrientation="portrait" >
+            
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
