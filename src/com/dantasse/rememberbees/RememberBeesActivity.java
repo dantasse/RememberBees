@@ -2,8 +2,6 @@ package com.dantasse.rememberbees;
 
 import java.text.NumberFormat;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 
 import android.app.Activity;
@@ -39,25 +37,20 @@ public class RememberBeesActivity extends Activity implements
     NumberFormat nf = NumberFormat.getNumberInstance();
     Handler handler;
 
-
     // for testing:
     private int numSamples;
     private long testStartTime;
     // for calibrating:
-    private float expAvgCal = 0;
     private long calibrateStartTime;
     private int secondsForPreCalibrating;
     private List<Float> calibrationReadings = new ArrayList<Float>();
     static final int NUM_CALIBRATION_WHACKS = 6;
     WhackThresholdCalculator whackThresholdCalculator = new WhackThresholdCalculator();
-    // in heard_1 state:
-    private float expAvg2 = 0;
     // for listening:
-    private float expAvg = 0;
-    private float whackThreshold = -5f; // will be negative; TODO should we absolute-value this?
-    // for while buzzing:
-    private float buzzExpAvg = 0;
-    private float expAvg3 = 0; //TODO refactor, ugh, right
+    private float xExpAvg = 0;
+    private float yExpAvg = 0;
+    private float zExpAvg = 0;
+    private float whackThreshold = 5f;
     
     private enum State {
         TESTING, //  making sure your phone's accelerometer is fast enough 
@@ -99,7 +92,7 @@ public class RememberBeesActivity extends Activity implements
             buzzes[i] = new Runnable() {
                 @Override
                 public void run() {
-                    vibrator.vibrate(2000);
+                    vibrator.vibrate(1000);
                     // TODO also post some kind of update on the screen, like
                     // how many buzzes are left
                 }
@@ -110,13 +103,11 @@ public class RememberBeesActivity extends Activity implements
     protected void onResume() {
         super.onResume();
         sensorManager.registerListener(this, accelerometer, SAMPLING_SPEED);
-//        changeUiState(State.NONE);
     }
 
     protected void onPause() {
         super.onPause();
         sensorManager.unregisterListener(this);
-//        changeUiState(State.NONE);
     }
     
     @Override
@@ -163,9 +154,7 @@ public class RememberBeesActivity extends Activity implements
             // nothing
             break;
         case CALIBRATING:
-            float zCal = event.values[2]; // 0 is x, 1 is y
-            expAvgCal = expAvgCal * .5f + zCal * .5f;
-            float outputCal = zCal - expAvgCal;
+            float outputCal = calculateValue(event.values);
             calibrationReadings.add(outputCal);
             long nowCal = System.currentTimeMillis();
             if (nowCal - calibrateStartTime > 5000) {
@@ -174,10 +163,11 @@ public class RememberBeesActivity extends Activity implements
                     calibrationArray[i] = calibrationReadings.get(i).floatValue();
                 }
                 whackThreshold = whackThresholdCalculator.determineWhackThreshold(calibrationArray);
+                changeUiState(State.NONE);
 
                 //TODO remove the below; it's just to output a lot of text for debugging
-                List<Pair<Float, Integer>> lowests = findLowests(calibrationReadings);
-                changeUiState(State.NONE);
+                List<Pair<Float, Integer>> lowests =
+                        whackThresholdCalculator.findHighests(calibrationReadings);
                 String lowestsStr = "";
                 for (Pair<Float, Integer> lowest : lowests) {
                     lowestsStr += nf.format(lowest.first) + "--" + lowest.second + "\n";
@@ -187,67 +177,13 @@ public class RememberBeesActivity extends Activity implements
                 //TODO remove the above
             }
             break;
-        case LISTENING:
-            float z = event.values[2]; // 0 is x, 1 is y
-            expAvg = expAvg * .5f + z * .5f;
-            float output = z - expAvg;
-            if (output < whackThreshold) {
-                // got to post this because otherwise it'll still be reading a
-                // whack while it's in the next state, so it'll immediately switch back.
-                handler.postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                        changeUiState(State.HEARD_1);
-                    }
-                }, 100);
-            }
-            break;
-        case HEARD_1:
-            // TODO what's the deal with this duplication of variables.
-            // someone who knows how to write code should clean this up.
-            float z2 = event.values[2]; // 0 is x, 1 is y
-            expAvg2 = expAvg2 * .5f + z2 * .5f;
-            float output2 = z2 - expAvg2;
-            if (output2 < whackThreshold) {
-                // got to post this because otherwise it'll still be reading a
-                // whack while it's in REMINDING, so it'll immediately switch back.
-                handler.postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                        changeUiState(State.REMINDING);
-                    }
-                }, 100);
-            }
-            break;
-        case REMINDING:
-            float buzzZ = event.values[2]; // 0 is x, 1 is y
-            buzzExpAvg = buzzExpAvg * .5f + buzzZ * .5f;
-            float buzzOutput = buzzZ - buzzExpAvg;
-            if (buzzOutput < whackThreshold) {
-
-                // got to post this because otherwise it'll still be reading a
-                // whack while it's in LISTENING, so it'll immediately switch back.
-                handler.postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                        changeUiState(State.HEARD_1_ON);
-                    }
-                }, 100);
-            }
-            break;
-        case HEARD_1_ON:
-            float z3 = event.values[2]; // 0 is x, 1 is y
-            expAvg3 = expAvg3 * .5f + z3 * .5f;
-            float output3 = z3 - expAvg3;
-            if (output3 < whackThreshold) {
-                // got to post this because otherwise it'll still be reading a
-                // whack while it's in LISTENING, so it'll immediately switch back.
-                handler.postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                        changeUiState(State.LISTENING);
-                    }
-                }, 100);
+        case LISTENING: // fall through
+        case HEARD_1: // fall through
+        case REMINDING: // fall through
+        case HEARD_1_ON: // detect whacks in all these cases
+            float output = calculateValue(event.values); //z - zExpAvg;
+            if (output > whackThreshold) {
+                whackHappened();
             }
             break;
         case NONE:
@@ -255,6 +191,57 @@ public class RememberBeesActivity extends Activity implements
             break;
         default:
             throw new IllegalStateException("Well, how did I get here?");
+        }
+    }
+
+    private float calculateValue(float[] values) {
+        float x = Math.abs(values[0]);
+        xExpAvg = xExpAvg * .5f + x * .5f;
+        float y = Math.abs(values[1]);
+        yExpAvg = yExpAvg * .5f + y * .5f;
+        float z = Math.abs(values[2]);
+        zExpAvg = zExpAvg * .5f + z * .5f;
+        return z - zExpAvg;
+    }
+
+    private void whackHappened() {
+        switch(currentState) {
+        case LISTENING:
+            // got to post this (here and in all below cases) because otherwise it'll still be
+            // reading a whack while it's in the next state, so it'll register twice.
+            handler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    changeUiState(State.HEARD_1);
+                }
+            }, 100);
+            break;
+        case HEARD_1:
+            handler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    changeUiState(State.REMINDING);
+                }
+            }, 100);
+            break;
+        case REMINDING:
+            handler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    changeUiState(State.HEARD_1_ON);
+                }
+            }, 100);
+            break;
+        case HEARD_1_ON:
+            handler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    changeUiState(State.LISTENING);
+                }
+            }, 100);
+            break;
+        default:
+            break;
         }
     }
 
@@ -310,37 +297,6 @@ public class RememberBeesActivity extends Activity implements
             changeUiState(State.LISTENING);
         }
     };
-    
-    private List<Pair<Float, Integer>> findLowests(List<Float> readings) {
-
-        List<Pair<Float, Integer>> lowests = new ArrayList<Pair<Float, Integer>>();
-        for(int i = 0; i < 10; i++)
-            lowests.add(new Pair<Float, Integer>(0.0f, 0));
-        
-        for(int i = 0; i < readings.size(); i++) {
-            Float f = readings.get(i);
-        
-            int numLowerThanF = 0;
-            for (Pair<Float, Integer> pair : lowests) {
-                if (pair.first < f) {
-                    numLowerThanF++;
-                }
-            }
-            if (numLowerThanF < 10) {
-                lowests.remove(lowests.size() - 1);
-                lowests.add(new Pair<Float, Integer>(f, i));
-            }
-            Collections.sort(lowests, new Comparator<Pair<Float, Integer>>() {
-                @Override
-                public int compare(Pair<Float, Integer> lhs,
-                        Pair<Float, Integer> rhs) {
-                    return lhs.first.compareTo(rhs.first);
-                }
-            });
-        }
-        return lowests;
-    }
-   
     
     private void changeUiState(State newState) {
         for (Runnable buzz : buzzes) {

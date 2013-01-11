@@ -1,10 +1,13 @@
 package com.dantasse.rememberbees;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
-public class WhackThresholdCalculator {
+import android.util.Pair;
 
+public class WhackThresholdCalculator {
     
     private float sum (List<Float> a){
         float sum = 0f;
@@ -36,32 +39,57 @@ public class WhackThresholdCalculator {
      * @return the value that, if the user hits this hard, it should be counted
      *   as a whack.
      */
-    float determineWhackThreshold(float[] data) {
+    public float determineWhackThreshold(float[] data) {
         float[] dataClone = data.clone();
         int numToThrowOut = dataClone.length / 100;
-        List<Float> lowests = new ArrayList<Float>();
-        while (lowests.size() < RememberBeesActivity.NUM_CALIBRATION_WHACKS) {
-            float min = 0.0f;
-            int minIndex = 0;
+        List<Float> highests = new ArrayList<Float>();
+        while (highests.size() < RememberBeesActivity.NUM_CALIBRATION_WHACKS) {
+            float max = 0.0f;
+            int maxIndex = 0;
             for(int i = 0; i < dataClone.length; i++) {
-                if (dataClone[i] < min) {
-                    min = dataClone[i];
-                    minIndex = i;
+                if (dataClone[i] > max) {
+                    max = dataClone[i];
+                    maxIndex = i;
                 }
             }
-            lowests.add(min);
+            highests.add(max);
             
             // throw out all data within a couple readings of that point, so we don't get one long
             // hit being counted as all of the calibration whacks.
-            for (int i = minIndex - numToThrowOut; i <= minIndex + numToThrowOut; i++) {
+            for (int i = maxIndex - numToThrowOut; i <= maxIndex + numToThrowOut; i++) {
                 if (i >= 0 && i < dataClone.length) {
-                  dataClone[i] = Float.MAX_VALUE;
+                  dataClone[i] = Float.NEGATIVE_INFINITY;
                 }
             }
         }
 
-        float mean = mean(lowests);//sum / lowests.size();
-        float sd = sd(lowests);
-        return mean + 2*sd; // 2 sd less than mean; plus because we're all in the negatives here
+        float mean = mean(highests);//sum / lowests.size();
+        float sd = sd(highests);
+        return mean - 2*sd; // 2 sd less than mean
+    }
+    
+    /** Returns the 10 highest values from |readings| and their indices in |readings| */
+    public List<Pair<Float, Integer>> findHighests(List<Float> readings) {
+
+        // for each one it's a reading (float) and an index into |readings| (integer)
+        List<Pair<Float, Integer>> highests = new ArrayList<Pair<Float, Integer>>();
+        for(int i = 0; i < 10; i++)
+            highests.add(new Pair<Float, Integer>(0.0f, 0));
+        
+        for (int i = 0; i < readings.size(); i++) {
+            Float f = readings.get(i);
+
+            if (f > highests.get(0).first) {
+                highests.remove(0);
+                highests.add(new Pair<Float, Integer>(f, i));
+                Collections.sort(highests, new Comparator<Pair<Float, Integer>>() {
+                    @Override
+                    public int compare(Pair<Float, Integer> lhs, Pair<Float, Integer> rhs) {
+                        return lhs.first.compareTo(rhs.first);
+                    }
+                });
+            }
+        }
+        return highests;
     }
 }
